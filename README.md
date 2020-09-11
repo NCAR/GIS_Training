@@ -4,6 +4,7 @@
 &emsp;-gdal<br>
 &emsp;-geopandas<br>
 &emsp;-ipywidgets<br>
+&emsp;-jupyter<br>
 &emsp;-matplotlib<br>
 &emsp;-netCDF4<br>
 &emsp;-numpy<br>
