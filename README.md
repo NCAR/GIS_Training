@@ -9,3 +9,4 @@
 &emsp;-numpy<br>
 &emsp;-pandas<br>
 &emsp;-rasterio<br>
+&emsp;-whitebox<br>
