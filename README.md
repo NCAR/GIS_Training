@@ -4,6 +4,7 @@
 &emsp;-descartes<br>
 &emsp;-gdal<br>
 &emsp;-geopandas<br>
+&emsp;-ipyleaflet<br>
 &emsp;-ipywidgets<br>
 &emsp;-jupyter<br>
 &emsp;-matplotlib<br>
