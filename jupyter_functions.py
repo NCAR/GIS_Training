@@ -76,7 +76,7 @@ def show_raster_map(raster_path, map_id, shp, out_folder):
     # Overlay image on map
     map_name = new_file_name.replace(".png", "")
     image = ImageOverlay(
-        url=f'files/wrf-hydro-training/GIS_data/Outputs/Raster_Outputs_Prj/{new_file_name}',
+        url=f'files/GIS_Training/Outputs/Raster_Outputs_Prj/{new_file_name}',
         bounds=bounds, name=map_name)
 
     map_id.add_layer(image)
