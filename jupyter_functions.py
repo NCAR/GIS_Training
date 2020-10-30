@@ -7,7 +7,7 @@ import matplotlib
 import rasterio
 import gdal
 
-from ipyleaflet import ImageOverlay
+from ipyleaflet import Map, GeoJSON, ScaleControl, FullScreenControl, basemaps, SplitMapControl, basemap_to_tiles, LayersControl, ImageOverlay
 from matplotlib import pyplot
 
 
@@ -81,3 +81,16 @@ def show_raster_map(raster_path, map_id, shp, out_folder):
 
     map_id.add_layer(image)
     pyplot.close()
+
+
+def create_map(center, zoom):
+    m = Map(center=center, zoom=zoom, scroll_wheel_zoom=True)
+    m.add_control(ScaleControl(position='bottomleft'))
+    m.add_control(FullScreenControl())
+    control = LayersControl(position='topright')
+    m.add_control(control)
+
+    m.layout.width = '950px'
+    m.layout.height = '750px'
+
+    return m
