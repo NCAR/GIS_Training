@@ -62,7 +62,7 @@ def show_raster_map(raster_path, map_id, shp, out_folder):
     cmap.set_under('k', alpha=0)
     pyplot.axis('off')
     new_file_name = file_name.replace('.tif', '.png')
-    pyplot.savefig(os.path.join(raster_outputs_prj, new_file_name), transparent=True, bbox_inches='tight')
+    pyplot.savefig(os.path.join(raster_outputs_prj, new_file_name), transparent=True, bbox_inches='tight', dpi=500)
 
     # get bounds from boundary shapefile
     bounds_df = (shp.bounds)
