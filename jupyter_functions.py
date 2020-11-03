@@ -19,7 +19,7 @@ def cmap_options(var_name):
     if var_name.lower() in ['latitude', 'longitude', 'channelgrid', 'frxst_pts']:
         #cmap = 'binary'
         cmap = pyplot.get_cmap('binary')
-    elif var_name.lower() in ['topography']:
+    elif var_name.lower() in ['topography', 'hgt_m']:
         #cmap = 'BrBG'  # 'gist_earth'
         cmap = pyplot.get_cmap('BrBG')
     elif var_name.lower() in ['flowdirection']:
