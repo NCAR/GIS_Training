@@ -10,37 +10,38 @@ import gdal
 from ipyleaflet import Map, GeoJSON, ScaleControl, FullScreenControl, basemaps, SplitMapControl, basemap_to_tiles, LayersControl, ImageOverlay
 from matplotlib import pyplot
 
-
 def cmap_options(var_name):
     # Default plot options
-    cmap = 'Blues'
+    #cmap = 'Blues'
+    cmap = pyplot.get_cmap('Blues')
     norm = None
 
-    if var_name in ['LATITUDE', 'LONGITUDE', 'CHANNELGRID', 'frxst_pts']:
-        cmap = 'binary'
-    elif var_name in ['TOPOGRAPHY']:
-        cmap = 'BrBG'  # 'gist_earth'
-    elif var_name in ['FLOWDIRECTION']:
+    if var_name.lower() in ['latitude', 'longitude', 'channelgrid', 'frxst_pts']:
+        #cmap = 'binary'
+        cmap = pyplot.get_cmap('binary')
+    elif var_name.lower() in ['topography']:
+        #cmap = 'BrBG'  # 'gist_earth'
+        cmap = pyplot.get_cmap('BrBG')
+    elif var_name.lower() in ['flowdirection']:
         colors = ['#ff0000', '#5959a6', '#806c93', '#a65959', '#a68659', '#a6a659', '#93a659', '#669966', '#669988',
                   '#999999']
         scale = [0, 1, 2, 4, 8, 16, 32, 64, 128, 255]
         cmap = matplotlib.colors.ListedColormap(colors)
         norm = matplotlib.colors.BoundaryNorm(scale, len(colors))
-    elif var_name in ['landuse']:
+    elif var_name.lower() in ['landuse']:
         colors = ['#ed0000', '#dbd83d', '#aa7028', '#fbf65d', '#e2e2c1', '#ccba7c', '#dcca8f', '#fde9aa', '#68aa63',
                   '#85c724', '#38814e', '#1c6330', '#b5c98e', '#476ba0', '#70a3ba', '#bad8ea', '#b2ada3', '#c9c977',
                   '#a58c30', '#d1ddf9']
         scale = [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23]
         cmap = matplotlib.colors.ListedColormap(colors)
         norm = matplotlib.colors.BoundaryNorm(scale, len(colors))
-    elif var_name in ['STREAMORDER']:
+    elif var_name.lower() in ['streamorder']:
         colors = ['blue', 'green', 'red', 'yellow', '#000000']
         scale = [.9, 1.9, 2.9, 3.9, 4]
         #         scale = [1, 2, 3, 4, 5]
         cmap = matplotlib.colors.ListedColormap(colors)
         norm = matplotlib.colors.BoundaryNorm(scale, len(colors))
     return cmap, norm
-
 
 def show_raster_map(raster_path, map_id, shp, out_folder):
     # Make new folder if does not exist
@@ -57,8 +58,13 @@ def show_raster_map(raster_path, map_id, shp, out_folder):
     # Open in rasterio, give colormap, make no data transparent, save as png
     src = rasterio.open(output_raster)
 
-    cmap = pyplot.get_cmap('viridis')
-    pyplot.imshow(src.read(1), cmap=cmap, aspect='auto', vmin=0.1)
+    varname = file_name.replace('.tif', '')
+    cmap, norm = cmap_options(varname)
+    pyplot.imshow(src.read(1), cmap=cmap, aspect='auto', vmin=0.1, norm=norm, interpolation='nearest')
+    
+    #cmap = pyplot.get_cmap('viridis')
+    #pyplot.imshow(src.read(1), cmap=cmap, aspect='auto', vmin=0.1)
+           
     cmap.set_under('k', alpha=0)
     pyplot.axis('off')
     new_file_name = file_name.replace('.tif', '.png')
@@ -82,7 +88,6 @@ def show_raster_map(raster_path, map_id, shp, out_folder):
     map_id.add_layer(image)
     pyplot.close()
 
-
 def create_map(center, zoom):
     m = Map(center=center, zoom=zoom, scroll_wheel_zoom=True)
     m.add_control(ScaleControl(position='bottomleft'))
@@ -92,5 +97,4 @@ def create_map(center, zoom):
 
     m.layout.width = '950px'
     m.layout.height = '750px'
-
     return m
