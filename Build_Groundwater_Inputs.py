@@ -74,13 +74,14 @@ if __name__ == '__main__':
                         help="Path to WPS geogrid (geo_em.d0*.nc) file or WRF-Hydro Fulldom_hires.nc file.")
     parser.add_argument("-f",
                         dest="in_fulldom",
+                        default='./{0}'.format(defaultFulldom),
                         help="Path to WRF-Hydro Fulldom_hires.nc file.")
     parser.add_argument("-m",
                         dest="GWmethod",
-                        default='./{0}'.format(defaultFulldom),
+                        default='FullDom LINKID local basins',
                         help="Method to create groundwater basins. Choose from 'FullDom basn_msk variable', "
                              "'FullDom LINKID local basins', 'Polygon Shapefile or Feature Class'"
-                             " default=FullDom basn_msk variable")
+                             " default='FullDom basn_msk variable'")
     parser.add_argument("-g",
                         dest="in_GWPolys",
                         default='',
@@ -125,7 +126,7 @@ if __name__ == '__main__':
     fdir = os.path.join(projdir, dir_d8)
     channelgrid = os.path.join(projdir, streams)
     if saveBasins_Fine:
-        basinRaster_Fine = os.path.join(projdir, 'GWBasins_fine.tif')
+        basinRaster_File = os.path.join(projdir, 'GWBasins_fine.tif')
         nclist.append('GWBasins_fine.tif')
     if saveBasins_Coarse:
         nclist.append(basinRaster)
@@ -153,10 +154,10 @@ if __name__ == '__main__':
 
     # Build groundwater files
     print('  Building Groundwater Basin inputs.')
-    GWBasns = build_GW_Basin_Raster(args.in_fulldom, projdir, defaultGWmethod, channelgrid, fdir, fine_grid, in_Polys=args.in_GWPolys)
+    GWBasns = build_GW_Basin_Raster(args.in_fulldom, projdir, args.GWmethod, channelgrid, fdir, fine_grid, in_Polys=args.in_GWPolys)
     build_GW_buckets(projdir, GWBasns, coarse_grid, Grid=True, saveRaster=saveBasins_Coarse)
     if saveBasins_Fine:
-        out_ds3 = gdal.GetDriverByName(RasterDriver).CreateCopy(basinRaster_Fine, GWBasns)
+        out_ds3 = gdal.GetDriverByName(RasterDriver).CreateCopy(basinRaster_File, GWBasns)
         out_ds3 = None
     GWBasns = None
     remove_file(fdir)

@@ -40,14 +40,24 @@ import platform                                                                 
 #os.environ["OGR_WKT_PRECISION"] = "5"                                           # Change the precision of coordinates
 
 # Import Additional Modules
-import ogr
-import osr
 import gdal
-import gdalconst
-from gdalnumeric import *                                                       # Assists in using BandWriteArray, BandReadAsArray, and CopyDatasetInfo
+import osgeo
 from osgeo import gdal_array
 import netCDF4
 import numpy
+
+try:
+    if sys.version_info >= (3, 0):
+        from osgeo import ogr
+        from osgeo import osr
+        from osgeo import gdalconst
+    else:
+        import ogr
+        import osr
+        import gdalconst
+except:
+    sys.exit('ERROR: cannot find GDAL/OGR modules')
+from gdalnumeric import *                                                       # Assists in using BandWriteArray, BandReadAsArray, and CopyDatasetInfo
 
 # Import whitebox
 from whitebox.WBT.whitebox_tools import WhiteboxTools
@@ -73,12 +83,14 @@ RasterDriver = 'GTiff'
 VectorDriver = 'ESRI Shapefile'                                                # Output vector file format (OGR driver name)
 
 # Version numbers toa ppend to metadata
-PpVersion = 'v5.1 (10/2019)'                                                    # WRF-Hydro ArcGIS Pre-processor version to add to FullDom metadata
+WRFH_Version = 5.2                                                              # WRF-Hydro version to be executed using the outputs of this tool
+PpVersion = 'Open-Source WRF-Hydro GIS Pre-Processing Tools v0.2.0 (04/2021)'   # WRF-Hydro ArcGIS Pre-processor version to add to FullDom metadata
 CFConv = 'CF-1.5'                                                               # CF-Conventions version to place in the 'Conventions' attribute of RouteLink files
 
 # Output netCDF format
 outNCType = 'NETCDF4_CLASSIC'                                                   # Define the output netCDF version for RouteLink.nc and LAKEPARM.nc
 
+###################################################
 # Default output file names
 FullDom = 'Fulldom_hires.nc'                                                    # Default Full Domain routing grid nc file
 LDASFile = 'GEOGRID_LDASOUT_Spatial_Metadata.nc'                                # Defualt LDASOUT domain grid nc file
@@ -93,7 +105,9 @@ StreamSHP = 'streams.shp'                                                       
 LakesSHP = 'lakes.shp'                                                          # Default lakes shapefile name
 minDepthCSV = 'Lakes_with_minimum_depth.csv'                                    # Output file containing lakes with minimum depth enforced.
 basinRaster = 'GWBasins.tif'                                                    # Output file name for raster grid of groundwater bucket locations
+###################################################
 
+###################################################
 # Global Variables
 NoDataVal = -9999                                                               # Default NoData value for gridded variables
 walker = 3                                                                      # Number of cells to walk downstream before gaged catchment delineation
@@ -101,7 +115,9 @@ LK_walker = 3                                                                   
 z_limit = 1000.0                                                                # Maximum fill depth (z-limit) between a sink and it's pour point. None or float.
 x_limit = None                                                                  # Maximum breach length for breaching depressions, in pixels. None or Int/Float
 lksatfac_val = 1000.0                                                           # Default LKSATFAC value (unitless coefficient)
+###################################################
 
+###################################################
 # Channel Routing default parameters for the RouteLink file.
 Qi = 0                                                                          # Initial Flow in link (cms)
 MusK = 3600                                                                     # Muskingum routing time (s)
@@ -112,6 +128,47 @@ BtmWdth = 5                                                                     
 Kc = 0                                                                          # Channel loss parameter (mm/hour), New for v1.2
 minSo = 0.001                                                                   # Minimum slope
 
+# Order-based Mannings N values for Strahler orders 1-10
+ManningsOrd = True                                                              # Switch to activate order-based Mannings N values
+Mannings_Order = {1:0.096,
+                    2:0.076,
+                    3:0.060,
+                    4:0.047,
+                    5:0.037,
+                    6:0.030,
+                    7:0.025,
+                    8:0.021,
+                    9:0.018,
+                    10:0.022}                                                    # Values based on CONUS JTTI research, originally from LR 7/01/2020, confirmed by JMC 6/18/21
+
+# Order-based Channel Side-Slope values for Strahler orders 1-10
+ChSSlpOrd = True                                                                # Switch to activate order-based Channel Side-Slope values
+Mannings_ChSSlp = {1:0.03,
+                    2:0.03,
+                    3:0.03,
+                    4:0.04,
+                    5:0.04,
+                    6:0.04,
+                    7:0.04,
+                    8:0.04,
+                    9:0.05,
+                    10:0.10}                                                    # Values from LR 7/01/2020
+
+# Order-based Bottom-width values for Strahler orders 1-10
+BwOrd = True                                                                    # Switch to activate order-based Bottom-width values
+Mannings_Bw = {1:1.6,
+               2:2.4,
+               3:3.5,
+               4:5.3,
+               5:7.4,
+               6:11.,
+               7:14.,
+               8:16.,
+               9:26.,
+               10:110.}                                                         # Values from LR 7/01/2020
+###################################################
+
+###################################################
 #Default Lake Routing parameters
 OrificeC = 0.1                                                                  # Default orifice coefficient (0=closed, 1=open)
 OrificA = 1.0                                                                   # Default orifice area (square meters)
@@ -121,13 +178,18 @@ ifd_Val = 0.90                                                                  
 minDepth = 1.0                                                                  # Minimum active lake depth for lakes with no elevation variation
 ChannelLakeCheck = True                                                         # Ensure (True) lakes intersect the channel network.
 dam_length = 10.0                                                               # Default length of the dam, multiplier on weir length
+###################################################
 
+###################################################
 # Default groundwater bucket (GWBUCKPARM) parameters
 coeff = 1.0000                                                                  # Bucket model coefficient
 expon = 3.000                                                                   # Bucket model exponent
 zmax = 50.00                                                                    # Conceptual maximum depth of the bucket
 zinit = 10.0000                                                                 # Initial depth of water in the bucket model
+Loss = 0                                                                        # Not intended for Community WRF-Hydro
 maskGW_Basins = False                                                           # Option to mask the GWBASINS.nc grid to only active channels
+addLoss = False                                                                 # Option to add loss function parameter to groundwater buckets. Not intended for Community WRF-Hydro use.s
+###################################################
 
 # Dictionaries of GEOGRID projections and projection names
 #   See http://www.mmm.ucar.edu/wrf/users/docs/user_guide_V3/users_guide_chap3.htm#_Description_of_the_1
@@ -160,6 +222,7 @@ pointSR = 4326                                                                  
 sphere_radius = 6370000.0                                                       # Radius of sphere to use (WRF Default = 6370000.0m)
 #wkt_text = "GEOGCS['GCS_Sphere_CUSTOM',DATUM['D_Sphere',SPHEROID['Sphere',%s,0.0]],PRIMEM['Greenwich',0.0],UNIT['Degree',0.0174532925199433]];-400 -400 1000000000;-100000 10000;-100000 10000;8.99462786704589E-09;0.001;0.001;IsHighPrecision" %sphere_radius
 
+###################################################
 # Temporary output file names for Whitebox outputs
 fill_depressions = "fill_depressions.tif"
 dir_d8 = "dir_d8.tif"
@@ -172,6 +235,7 @@ watersheds = "watersheds.tif"                                                   
 start_pts_temp = 'Projected_start_points.shp'                                   # Channel initiation points projected to model CRS
 stream_id = "stream_id.tif"                                                     # Stream link ID raster
 streams_vector = "streams.shp"                                                  # Stream vector shapefile
+###################################################
 
 ###################################################
 # Dimension names to be used to identify certain known dimensions
@@ -421,7 +485,8 @@ class WRF_Hydro_Grid:
 
         elif self.map_pro == 3:
             # Mercator Projection
-            proj.SetMercator(latitude_of_origin, central_meridian, 1, 0, 0)     # Scale = 1???
+            proj.SetMercator(standard_parallel_1, central_meridian, 1, 0, 0)     # Scale = 1???
+            #proj.SetMercator(latitude_of_origin, central_meridian, 1, 0, 0)     # Scale = 1???
             #proj.SetMercator(double clat, double clong, double scale, double fe, double fn)
 
         elif self.map_pro == 6:
@@ -442,6 +507,13 @@ class WRF_Hydro_Grid:
         # Set the origin for the output raster (in GDAL, usuall upper left corner) using projected corner coordinates
         wgs84_proj = osr.SpatialReference()
         wgs84_proj.ImportFromProj4(wgs84_proj4)
+
+        # Added 11/19/2020 to allow for GDAL 3.0 changes to the order of coordinates in transform
+        if int(osgeo.__version__[0]) >= 3:
+            # GDAL 3 changes axis order: https://github.com/OSGeo/gdal/issues/1546
+            wgs84_proj.SetAxisMappingStrategy(osgeo.osr.OAMS_TRADITIONAL_GIS_ORDER)
+            proj.SetAxisMappingStrategy(osgeo.osr.OAMS_TRADITIONAL_GIS_ORDER)
+
         transform = osr.CoordinateTransformation(wgs84_proj, proj)
         point = ogr.Geometry(ogr.wkbPoint)
         point.AddPoint_2D(corner_lon, corner_lat)
@@ -1056,6 +1128,12 @@ def ReprojectCoords(xcoords, ycoords, src_srs, tgt_srs):
     '''
     tic1 = time.time()
 
+    # Added 11/19/2020 to allow for GDAL 3.0 changes to the order of coordinates in transform
+    if int(osgeo.__version__[0]) >= 3:
+        # GDAL 3 changes axis order: https://github.com/OSGeo/gdal/issues/1546
+        src_srs.SetAxisMappingStrategy(osgeo.osr.OAMS_TRADITIONAL_GIS_ORDER)
+        tgt_srs.SetAxisMappingStrategy(osgeo.osr.OAMS_TRADITIONAL_GIS_ORDER)
+
     # Setup coordinate transform
     transform = osr.CoordinateTransformation(src_srs, tgt_srs)
 
@@ -1121,6 +1199,12 @@ def project_Features(InputVector, outProj, clipGeom=None, geomType=None):
     in_proj = in_layer.GetSpatialRef()                                          # Obtain the coordinate reference object.
     in_LayerDef = in_layer.GetLayerDefn()
 
+    # Added 11/19/2020 to allow for GDAL 3.0 changes to the order of coordinates in transform
+    if int(osgeo.__version__[0]) >= 3:
+        # GDAL 3 changes axis order: https://github.com/OSGeo/gdal/issues/1546
+        in_proj.SetAxisMappingStrategy(osgeo.osr.OAMS_TRADITIONAL_GIS_ORDER)
+        outProj.SetAxisMappingStrategy(osgeo.osr.OAMS_TRADITIONAL_GIS_ORDER)
+
     # Check if a coordinate transformation (projection) must be performed
     if not outProj.IsSame(in_proj):
         print('    Input shapefile projection does not match requested output. Transforming.')
@@ -1160,7 +1244,7 @@ def project_Features(InputVector, outProj, clipGeom=None, geomType=None):
             continue                                                            # Trap because some geometries end up as None
         feature.SetGeometry(geometry)                                           # Set output Shapefile's feature geometry
         outLayer.CreateFeature(feature)
-        feature = outFeature = geometry = None                                  # Clear memory
+        feature = geometry = None                                  # Clear memory
     in_layer.ResetReading()
     outLayer.ResetReading()
     outFeatCount = outLayer.GetFeatureCount()                                   # Get number of features in output layer
@@ -1623,6 +1707,8 @@ def build_GWBUCKPARM(out_dir, cat_areas, cat_comids):
     Zinits = rootgrp.createVariable('Zinit', 'f4', (dim1))                  # Variable (32-bit floating point)
     Area_sqkms = rootgrp.createVariable('Area_sqkm', 'f4', (dim1))          # Variable (32-bit floating point)
     ComIDs = rootgrp.createVariable('ComID', 'i4', (dim1))                  # Variable (32-bit signed integer)
+    if addLoss:
+        LossF = rootgrp.createVariable('Loss', 'f4', (dim1))                  # Variable (32-bit signed integer)
 
     # Set variable descriptions
     Basins.long_name = 'Basin monotonic ID (1...n)'
@@ -1638,6 +1724,9 @@ def build_GWBUCKPARM(out_dir, cat_areas, cat_comids):
     Zmaxs.units = 'mm'
     Zinits.units = 'mm'
     Area_sqkms.units = 'km2'
+    if addLoss:
+        LossF.units = '-'
+        LossF.long_name = "Fraction of bucket output lost"
 
     # Fill in global attributes
     rootgrp.featureType = 'point'                                           # For compliance
@@ -1651,6 +1740,8 @@ def build_GWBUCKPARM(out_dir, cat_areas, cat_comids):
     Zinits[:] = zinit
     Area_sqkms[:] = numpy.array(cat_areas)
     ComIDs[:] = numpy.array(cat_comids)
+    if addLoss:
+        LossF[:] = Loss
 
     # Close file
     rootgrp.close()
@@ -1762,7 +1853,7 @@ def build_GW_buckets(out_dir, GWBasns, grid_obj, Grid=True, saveRaster=False):
     print('Finished building groundwater parameter files in {0: 3.2f} seconds'.format(time.time()-tic1))
     return
 
-def force_edges_off_grid(fd_arr):
+def force_edges_off_grid(fd_arr, ignore_vals=[]):
     '''
     10/23/2020:
         This function is intended to resolve an incompatibility between Whitebox'
@@ -1784,7 +1875,7 @@ def force_edges_off_grid(fd_arr):
     '''
     tic1 = time.time()
 
-    # Dictionary to
+    silent = True       # Supress messages about cells flowing off of the edge.
 
     # Get array shape
     arr_shape = fd_arr.shape
@@ -1813,7 +1904,8 @@ def force_edges_off_grid(fd_arr):
                 # Bottom edge
                 fd_arr_out[j,i] = 4
             else:
-                print('        Not able to determine which edge 0-value in flow direction grid at index [{0},{1}] (i,j) flows to.'.format(i,j))
+                if not silent:
+                    print('        Not able to determine which edge 0-value in flow direction grid at index [{0},{1}] (i,j) flows to.'.format(i,j))
             counter+=1
     if fd_arr_out[fd_arr_out==0].shape[0] == 0:
         print('    Coerced {0} 0-value flow direction cells to flow off of the grid.'.format(counter))
@@ -1846,6 +1938,7 @@ def WB_functions(rootgrp, indem, projdir, threshold, ovroughrtfac_val, retdeprtf
     fill_deps = True                                    # Option to Fill Depressions with z_limit
     breach_deps = False                                 # Option to Breach Depressions
     breach_deps_LC = False                              # Option to use Breach Depressions (Least Cost)
+    zero_background_stream_order = True                 # 2021/09/24 Adding option for specifying zero-background as output of stream order tools
 
     # Temporary output files
     flow_acc = "flow_acc.tif"
@@ -1989,13 +2082,14 @@ def WB_functions(rootgrp, indem, projdir, threshold, ovroughrtfac_val, retdeprtf
     fill_arr[fill_arr==ndv] = NoDataVal                                         # Replace raster NoData with WRF-Hydro NoData value
     rootgrp.variables['TOPOGRAPHY'][:] = fill_arr
     print('    Process: TOPOGRAPHY written to output netCDF.')
-    del fill_arr, ndv       #, fill_pits_file
+    del fill_arr, ndv
 
     # Process: Flow Direction
     dir_d8_file = os.path.join(projdir, dir_d8)
     fdir_arr, ndv = return_raster_array(dir_d8_file)
-    fdir_arr[fdir_arr==ndv] = 255                                               # Replace raster NoData with specific value
+    #fdir_arr[fdir_arr==ndv] = 255                                               # Replace raster NoData with specific value
     fdir_arr_out = force_edges_off_grid(fdir_arr)                               # Force 0-value cells to flow off edge of grid.
+    fdir_arr_out[fdir_arr_out==ndv] = 255                                       # Replace raster NoData with specific value
     rootgrp.variables['FLOWDIRECTION'][:] = fdir_arr_out
     print('    Process: FLOWDIRECTION written to output netCDF.')
     del fdir_arr, fdir_arr_out, ndv
@@ -2012,25 +2106,25 @@ def WB_functions(rootgrp, indem, projdir, threshold, ovroughrtfac_val, retdeprtf
     if not startPts:
         # Create stream channel raster according to threshold
         print('    Flow accumulation will be thresholded to build channel pixels.')
-        wbt.extract_streams(flow_acc, streams, threshold, zero_background=False)
+        wbt.extract_streams(flow_acc, streams, threshold, zero_background=zero_background_stream_order)
 
     if startPts is not None:
         # Added 8/14/2020 to use a vector of points to seed the channelgrid
 
         # Project input points and clip to domain if necessary
         geom = boundarySHP(dir_d8_file)                                         # Get domain extent for cliping geometry
-        poly_ds, poly_layer, fieldNames = project_Features(startPts,
+        pt_ds, pt_layer, fieldNames = project_Features(startPts,
                                                             geom.GetSpatialReference(),
                                                             clipGeom=geom,
                                                             geomType=ogr.wkbPoint)
 
         # Project the input polygons to the output coordinate system
         temp_pts = os.path.join(projdir, start_pts_temp)
-        out_ds = ogr.GetDriverByName(VectorDriver).CopyDataSource(poly_ds, temp_pts) # Copy to file on disk
-        poly_layer = poly_ds = fieldNames = out_ds = geom = None
+        out_ds = ogr.GetDriverByName(VectorDriver).CopyDataSource(pt_ds, temp_pts) # Copy to file on disk
+        pt_layer = pt_ds = fieldNames = out_ds = geom = None
 
         print('    Flow accumulation will be weighted using input channel initiation points.')
-        wbt.trace_downslope_flowpaths(temp_pts, dir_d8, streams, esri_pntr=esri_pntr, zero_background=False)
+        wbt.trace_downslope_flowpaths(temp_pts, dir_d8, streams, esri_pntr=esri_pntr, zero_background=zero_background_stream_order)
 
         driver = ogr.Open(temp_pts).GetDriver()
         driver.DeleteDataSource(temp_pts)                                       # Delete input file
@@ -2039,20 +2133,37 @@ def WB_functions(rootgrp, indem, projdir, threshold, ovroughrtfac_val, retdeprtf
     # Export stream channel raster
     streams_file = os.path.join(projdir, streams)
     strm_arr, ndv = return_raster_array(streams_file)
+    strm_arr[strm_arr==ndv] = NoDataVal
+    if zero_background_stream_order:
+        #strm_arr[strm_arr<-1] = NoDataVal               # Added 9/24/2021 as a test
+        #strm_arr[strm_arr>20] = NoDataVal               # Added 9/24/2021 as a test
+        strm_arr[strm_arr == 0] = NoDataVal
+
+        # Must set NoData in this file because it is used later by reach-based routing routine.
+        ds = gdal.Open(streams_file, 1)
+        ds.GetRasterBand(1).SetNoDataValue(0)                    # Set noData
+        ds = None
+
     if not startPts:
         strm_arr[strm_arr==1] = 0
     if startPts is not None:
         # Added 10/6/2020 to reclassify results of trace_downslope_flowpaths
         strm_arr[strm_arr!=ndv] = 0
-    strm_arr[strm_arr==ndv] = NoDataVal
     rootgrp.variables['CHANNELGRID'][:] = strm_arr
     print('    Process: CHANNELGRID written to output netCDF.')
     del strm_arr, ndv, flow_acc
 
     # Process: Stream Order
-    wbt.strahler_stream_order(dir_d8, streams, strahler, esri_pntr=esri_pntr, zero_background=False)
+    wbt.strahler_stream_order(dir_d8, streams, strahler, esri_pntr=esri_pntr, zero_background=zero_background_stream_order)
     strahler_file = os.path.join(projdir, strahler)
     strahler_arr, ndv = return_raster_array(strahler_file)
+    if zero_background_stream_order:
+        strahler_arr[strahler_arr==0] = NoDataVal
+
+        # Must set NoData in this file because it is used later by reach-based routing routine.
+        ds = gdal.Open(strahler_file, 1)
+        ds.GetRasterBand(1).SetNoDataValue(0)                    # Set noData
+        ds = None
 
     # -9999 does not fit in the 8-bit types, so it gets put in as -15 by netCDF4 for some reason
     strahler_arr[strahler_arr==ndv] = NoDataVal
@@ -2105,6 +2216,12 @@ def CSV_to_SHP(in_csv, DriverName='MEMORY', xVar='LON', yVar='LAT', idVar='FID',
         transform = osr.CoordinateTransformation(srs, out_srs)
     else:
         out_srs = srs.Clone()
+
+    # Added 11/19/2020 to allow for GDAL 3.0 changes to the order of coordinates in transform
+    if int(osgeo.__version__[0]) >= 3:
+        # GDAL 3 changes axis order: https://github.com/OSGeo/gdal/issues/1546
+        srs.SetAxisMappingStrategy(osgeo.osr.OAMS_TRADITIONAL_GIS_ORDER)
+        out_srs.SetAxisMappingStrategy(osgeo.osr.OAMS_TRADITIONAL_GIS_ORDER)
 
     # Add the fields we're interested in
     layer = data_source.CreateLayer('frxst_FC', out_srs, ogr.wkbPoint)
@@ -2349,12 +2466,27 @@ def build_RouteLink(RoutingNC, order, From_To, NodeElev, NodesLL, NodesXY, Lengt
     Qis[:] = Qi
     MusKs[:] = MusK
     MusXs[:] = MusX
-    ns[:] = n
-    ChSlps[:] = ChSlp
-    BtmWdths[:] = BtmWdth
     Times[:] = 0
     Kcs[:] = Kc
     #LakeDis[:] = NoDataVal                                                      # Fill with default nodata value. Disabled to keep all values uninitialized
+
+    # Apply order-based Mannings N values according to global dictionary "Mannings_Order"
+    if ManningsOrd:
+        ns[:] = numpy.array([Mannings_Order[item] for item in orders[:]])
+    else:
+        ns[:] = n
+
+    # Apply order-based Channel Side-slope values according to global dictionary "Mannings_Order"
+    if ChSSlpOrd:
+        ChSlps[:] = numpy.array([Mannings_ChSSlp[item] for item in orders[:]])
+    else:
+        ChSlps[:] = ChSlp
+
+    # Apply order-based bottom-width values according to global dictionary "Mannings_Order"
+    if BwOrd:
+        BtmWdths[:] = numpy.array([Mannings_Bw[item] for item in orders[:]])
+    else:
+        BtmWdths[:] = BtmWdth
 
     # Added 10/10/2017 by KMS to include user-supplied gages in reach-based routing files
     if gageDict is not None:
@@ -2460,7 +2592,7 @@ def Routing_Table(projdir, rootgrp, grid_obj, fdir, strm, Elev, Strahler, gages=
 
     # Find any LINKID reach ID values that did not get transferred to the stream vector file.
     # These are typically single-cell channel cells on the edge of the grid.
-    ds = ogr.Open(os.path.join(projdir, streams_vector))
+    ds = ogr.Open(streams_vector_file)
     lyr = ds.GetLayer(0)                                               # Get the 'layer' object from the data source
     vector_reach_IDs = numpy.unique([feature.GetField('STRM_VAL') for feature in lyr])
     print('        Found {0} unique IDs in stream vector layer.'.format(len(vector_reach_IDs)))
@@ -2498,6 +2630,11 @@ def Routing_Table(projdir, rootgrp, grid_obj, fdir, strm, Elev, Strahler, gages=
     # Setup coordinate transform for calculating lat/lon from x/y
     wgs84_proj = osr.SpatialReference()
     wgs84_proj.ImportFromProj4(wgs84_proj4)
+
+    # Added 11/19/2020 to allow for GDAL 3.0 changes to the order of coordinates in transform
+    if int(osgeo.__version__[0]) >= 3:
+        # GDAL 3 changes axis order: https://github.com/OSGeo/gdal/issues/1546
+        wgs84_proj.SetAxisMappingStrategy(osgeo.osr.OAMS_TRADITIONAL_GIS_ORDER)
     coordTrans = osr.CoordinateTransformation(grid_obj.proj, wgs84_proj)        # Transformation from grid projection to WGS84
 
     # Initiate dictionaries for storing topology and attribute information
@@ -2683,7 +2820,8 @@ def build_LAKEPARM(LakeNC, min_elevs, areas, max_elevs, OrificEs, cen_lats, cen_
     WeirEs = rootgrp.createVariable('WeirE', 'f8', (dim1))                      # Variable (64-bit floating point)
     AscendOrder = rootgrp.createVariable('ascendingIndex', 'i4', (dim1))        # Variable (32-bit signed integer)
     ifd = rootgrp.createVariable('ifd', 'f4', (dim1))                           # Variable (32-bit floating point)
-    Dam = rootgrp.createVariable('Dam_Length', 'i4', (dim1))                    # Variable (32-bit signed integer)
+    if WRFH_Version >= 5.2:
+        Dam = rootgrp.createVariable('Dam_Length', 'i4', (dim1))                # Variable (32-bit signed integer)
 
     # Add CF-compliant coordinate system variable
     if pointCF:
@@ -2718,7 +2856,8 @@ def build_LAKEPARM(LakeNC, min_elevs, areas, max_elevs, OrificEs, cen_lats, cen_
     Times.units = 'days since 2000-01-01 00:00:00'                              # For compliance. Reference time arbitrary
     WeirEs.units = 'm'
     ids.cf_role = "timeseries_id"                                               # For compliance
-    Dam.long_name = 'Dam length (multiplier on weir length)'
+    if WRFH_Version >= 5.2:
+        Dam.long_name = 'Dam length (multiplier on weir length)'
 
     # Apply grid_mapping and coordinates attributes to all variables
     for varname, ncVar in rootgrp.variables.items():
@@ -2746,7 +2885,8 @@ def build_LAKEPARM(LakeNC, min_elevs, areas, max_elevs, OrificEs, cen_lats, cen_
     longs[:] = numpy.array([cen_lons[lkid] for lkid in min_elev_keys])
     WeirEs[:] = numpy.array([WeirE_vals.get(lkid,0) for lkid in min_elev_keys])    # WierH is 0.9 of the distance between the low elevation and max lake elevation
     ifd[:] = ifd_Val
-    Dam[:] = dam_length
+    if WRFH_Version >= 5.2:
+        Dam[:] = dam_length
 
     # Close file
     rootgrp.close()
@@ -2776,6 +2916,7 @@ def add_reservoirs(rootgrp, projdir, fac, in_lakes, grid_obj, lakeIDfield=None, 
     """
     #(rootgrp, projdir, fac, in_lakes, grid_obj, lakeIDfield, Gridded) = (rootgrp2, projdir, fac, in_lakes, fine_grid, None, gridded)
     tic1 = time.time()                                                          # Set timer
+    subsetLakes = True                                                          # Option to eliminate lakes that do not intersect channel network
     print('      Adding reservoirs to routing stack.')
     print('      Gridded: {0}'.format(Gridded))
 
@@ -2793,6 +2934,11 @@ def add_reservoirs(rootgrp, projdir, fac, in_lakes, grid_obj, lakeIDfield=None, 
     # Setup coordinate transform for calculating lat/lon from x/y
     wgs84_proj = osr.SpatialReference()
     wgs84_proj.ImportFromProj4(wgs84_proj4)
+
+    # Added 11/19/2020 to allow for GDAL 3.0 changes to the order of coordinates in transform
+    if int(osgeo.__version__[0]) >= 3:
+        # GDAL 3 changes axis order: https://github.com/OSGeo/gdal/issues/1546
+        wgs84_proj.SetAxisMappingStrategy(osgeo.osr.OAMS_TRADITIONAL_GIS_ORDER)
     coordTrans = osr.CoordinateTransformation(grid_obj.proj, wgs84_proj)        # Transformation from grid projection to WGS84
     coordTrans_inv = osr.CoordinateTransformation(wgs84_proj, grid_obj.proj)    # Transformation from WGS84 to grid projection
 
@@ -2855,7 +3001,6 @@ def add_reservoirs(rootgrp, projdir, fac, in_lakes, grid_obj, lakeIDfield=None, 
     # Code-block to eliminate lakes that do not coincide with active channel cells
     strm_arr = rootgrp.variables['CHANNELGRID'][:]                              # Read channel grid array from Fulldom
     lake_uniques = numpy.unique(Lake_arr[Lake_arr!=NoDataVal])
-    subsetLakes = True                                                          # Option to eliminate lakes that do not intersect channel network
     if subsetLakes:
         Lk_chan = {lake:strm_arr[numpy.logical_and(Lake_arr==lake, strm_arr==0)].shape[0]>0 for lake in lake_uniques}   # So slow...
         old_Lk_count = lake_uniques.shape[0]
@@ -2991,7 +3136,6 @@ def add_reservoirs(rootgrp, projdir, fac, in_lakes, grid_obj, lakeIDfield=None, 
     print('    Lake parameter table created without error in {0: 3.2f} seconds.'.format(time.time()-tic1))
     return rootgrp
 
-
 def getxy(ds):
     """
     This function will use the affine transformation (GeoTransform) to produce an
@@ -3019,6 +3163,27 @@ def getxy(ds):
     del x, y
     print('    Conversion of input raster to XMap/YMap completed without error.')
     return xmap, ymap
+
+def flip_dim(array_dimensions, DimToFlip='south_north'):
+    '''
+    Function to flip a dimension based on provided dimension names.
+
+        array_dimensions - A list of dimension names for the input dataset
+        DimToFlip - The dimension to reverse.
+    '''
+
+    # Determine how to slice the array in order to fit into the netCDF
+    ind = [slice(None)] * len(array_dimensions)                                 # Build array slice as default (:)
+
+    # Flip a dimension if necessary
+    if DimToFlip in array_dimensions:
+        flipIdx = array_dimensions.index(DimToFlip)
+        ind[flipIdx] = slice(None,None,-1)
+        print("    Reversing order of dimension '{0}'".format(array_dimensions[flipIdx]))
+        del flipIdx
+    else:
+        print("    Requested dimension for reversal not found '{0}'.".format(DimToFlip))
+    return ind
 
 # --- End Functions --- #
 

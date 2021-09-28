@@ -32,10 +32,17 @@ from argparse import ArgumentParser
 import platform                                                                 # Added 8/20/2020 to detect OS
 
 # Import Additional Modules
-import osr
 import gdal
 from gdalnumeric import *
 import netCDF4
+
+try:
+    if sys.version_info >= (3, 0):
+        from osgeo import osr
+    else:
+        import osr
+except:
+    sys.exit('ERROR: cannot find GDAL/OGR modules')
 
 # Import function library into namespace. Must exist in same directory as this script.
 import wrfhydro_functions as wrfh                                               # Function script packaged with this toolbox
@@ -73,6 +80,7 @@ default_lksatfac_val = wrfh.lksatfac_val
 
 # Script options
 runGEOGRID_STANDALONE = True                                                    # Switch for testing the GEOGRID STANDALONE Pre-processing workflow
+cleanUp = True                                                                 # Switch to keep all temporary files (for troubleshooting)
 
 # Methods test switches
 coordMethod1 = True                                                             # Interpolate GEOGRID latitude and longitude coordinate arrays
@@ -165,7 +173,7 @@ def GEOGRID_STANDALONE(inGeogrid,
     # Print information provided to this function
     for key, value in locals().items():
         if callable(value) and value.__module__ == __name__:
-            print('      {0}: {1}'.format(key, val))
+            print('      {0}: {1}'.format(key, value))
 
     # Set some switches
     if os.path.exists(in_csv):
@@ -281,7 +289,8 @@ def GEOGRID_STANDALONE(inGeogrid,
     # Step 4 - Hyrdo processing functions -- Whitebox
     rootgrp2, fdir, fac, channelgrid, fill, order = wrfh.WB_functions(rootgrp2, outDEM,
             projdir, threshold, ovroughrtfac_val, retdeprtfac_val, lksatfac_val, startPts=startPts)
-    wrfh.remove_file(outDEM)                                                    # Delete output DEM from disk
+    if cleanUp:
+        wrfh.remove_file(outDEM)                                                # Delete output DEM from disk
 
     # If the user provides forecast points as a CSV file, alter outputs accordingly
     if AddGages:
@@ -292,8 +301,9 @@ def GEOGRID_STANDALONE(inGeogrid,
     # Moved 10/9/2017 by KMS to allow masking routing files (LINKID, Route_Link, etc.) to forecast points if requested
     if routing:
         rootgrp2 = wrfh.Routing_Table(projdir, rootgrp2, fine_grid, fdir, channelgrid, fill, order, gages=AddGages)
-    wrfh.remove_file(fill)                                                      # Delete fill from disk
-    wrfh.remove_file(order)                                                     # Delete order from disk
+    if cleanUp:
+        wrfh.remove_file(fill)                                                  # Delete fill from disk
+        wrfh.remove_file(order)                                                 # Delete order from disk
 
     gridded = not routing                                                       # Flag for gridded routing
     if os.path.exists(in_lakes):
@@ -314,9 +324,10 @@ def GEOGRID_STANDALONE(inGeogrid,
         wrfh.build_GW_buckets(projdir, GWBasns, coarse_grid, Grid=True)
         GWBasns = None
 
-    wrfh.remove_file(fdir)                                                      # Delete fdir from disk
-    wrfh.remove_file(fac)                                                       # Delete fac from disk
-    wrfh.remove_file(channelgrid)                                               # Delete channelgrid from disk
+    if cleanUp:
+        wrfh.remove_file(fdir)                                                  # Delete fdir from disk
+        wrfh.remove_file(fac)                                                   # Delete fac from disk
+        wrfh.remove_file(channelgrid)                                           # Delete channelgrid from disk
     if routing:
         wrfh.remove_file(os.path.join(projdir, wrfh.stream_id))
 
@@ -325,7 +336,8 @@ def GEOGRID_STANDALONE(inGeogrid,
     print('Built output .zip file in {0: 3.2f} seconds.'.format(time.time()-tic1))  # Diagnotsitc print statement
 
     # Delete all temporary files
-    shutil.rmtree(projdir)
+    if cleanUp:
+        shutil.rmtree(projdir)
 
 # --- End Functions --- #
 
@@ -397,7 +409,8 @@ if __name__ == '__main__':
                         default=None,
                         help="Path to channel initiation points feature class. Must be 2D point type. [OPTIONAL]")
     parser.add_argument("--gw",
-                        dest="gw_polys",type=lambda x: is_valid_file(parser, x),
+                        dest="gw_polys",
+                        type=lambda x: is_valid_file(parser, x),
                         default=None,
                         help="Path to groundwater polygons feature class [OPTIONAL]")
 
@@ -448,27 +461,27 @@ if __name__ == '__main__':
     if args.gw_polys is not None:
         args.gw_polys = os.path.abspath(args.gw_polys)                          # Obtain absolute path for optional input file.
 
-    # Print information to screen
-    print('  Values that will be used in building this routing stack:')
-    print('    Input WPS Geogrid file: {0}'.format(args.in_Geogrid))
-    print('    Forecast Point CSV file: {0}'.format(args.in_CSV))
-    print('    Mask CHANNELGRID variable to forecast basins?: {0}'.format(args.basin_mask))
-    print('    Create reach-based routing (RouteLink) files?: {0}'.format(args.RB_routing))
-    print('    Lake polygon feature class: {0}'.format(args.in_reservoirs))
-    print('    Input high-resolution DEM: {0}'.format(args.inDEM))
-    print('    Regridding factor: {0}'.format(args.cellsize))
-    print('    Stream initiation threshold: {0}'.format(args.threshold))
-    print('    OVROUGHRTFAC parameter value: {0}'.format(args.ovroughrtfac_val))
-    print('    RETDEPRTFAC parameter value: {0}'.format(args.retdeprtfac_val))
-    print('    Input channel initiation start point feature class: {0}'.format(args.channel_starts))
-    print('    Input groundwater basin polygons: {0}'.format(args.gw_polys))
-    print('    Output ZIP file: {0}'.format(args.out_zip_file))
-
     if runGEOGRID_STANDALONE:
 
         # Configure logging
         logfile = args.out_zip_file.replace('.zip', '.log')
         tee = wrfh.TeeNoFile(logfile, 'w')
+
+        # Print information to screen
+        print('  Values that will be used in building this routing stack:')
+        print('    Input WPS Geogrid file: {0}'.format(args.in_Geogrid))
+        print('    Forecast Point CSV file: {0}'.format(args.in_CSV))
+        print('    Mask CHANNELGRID variable to forecast basins?: {0}'.format(args.basin_mask))
+        print('    Create reach-based routing (RouteLink) files?: {0}'.format(args.RB_routing))
+        print('    Lake polygon feature class: {0}'.format(args.in_reservoirs))
+        print('    Input high-resolution DEM: {0}'.format(args.inDEM))
+        print('    Regridding factor: {0}'.format(args.cellsize))
+        print('    Stream initiation threshold: {0}'.format(args.threshold))
+        print('    OVROUGHRTFAC parameter value: {0}'.format(args.ovroughrtfac_val))
+        print('    RETDEPRTFAC parameter value: {0}'.format(args.retdeprtfac_val))
+        print('    Input channel initiation start point feature class: {0}'.format(args.channel_starts))
+        print('    Input groundwater basin polygons: {0}'.format(args.gw_polys))
+        print('    Output ZIP file: {0}'.format(args.out_zip_file))
 
         # Create scratch directory for temporary outputs
         projdir = os.path.join(os.path.dirname(args.out_zip_file), 'scratchdir')
