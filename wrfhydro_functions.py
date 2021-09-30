@@ -51,7 +51,8 @@ import netCDF4
 import numpy
 
 # Import whitebox
-from whitebox.WBT.whitebox_tools import WhiteboxTools
+#from whitebox.WBT.whitebox_tools import WhiteboxTools
+from whitebox.whitebox_tools import WhiteboxTools
 
 # Module options
 gdal.UseExceptions()                                                            # this allows GDAL to throw Python Exceptions
